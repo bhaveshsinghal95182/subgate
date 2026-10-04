@@ -492,8 +492,11 @@ class Gate:
     # -- verdicts -------------------------------------------------------------
 
     def _queue_records(self, t: dict) -> list[dict]:
-        _, base, key = self.cfg.apps[t["category"]]
-        queue = arr_request(base, key, "GET", "/api/v3/queue?page=1&pageSize=1000")
+        app, base, key = self.cfg.apps[t["category"]]
+        # Include downloads the Arr can't match by name (common for anime); the default
+        # queue hides them, and a rejected one would only be stopped, not blocklisted.
+        unknown = "includeUnknownMovieItems" if app == "Radarr" else "includeUnknownSeriesItems"
+        queue = arr_request(base, key, "GET", f"/api/v3/queue?page=1&pageSize=1000&{unknown}=true")
         return [r for r in (queue or {}).get("records", [])
                 if (r.get("downloadId") or "").upper() == t["hash"].upper()]
 
