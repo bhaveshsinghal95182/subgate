@@ -19,6 +19,8 @@ blocklisting, so Radarr/Sonarr search for the next release on their own.
    - an English audio track (dub or original; commentary tracks don't count)
      → **pass**. Untagged (`und`) audio, as in YTS mp4s, counts only when
      Radarr/Sonarr say the title's original language is English.
+   - **movies only** (Radarr): a Hindi audio track (`hi`, `hin`, title "Hindi"), or
+     untagged audio when the movie's original language is Hindi → **pass**
    - neither → **reject**
    - header not readable yet → keep downloading up to 16 MiB (+ last 8 MiB for
      mp4/m4v/mov), then reject as "unreadable header".

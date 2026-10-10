@@ -219,10 +219,19 @@ def _audio_is_commentary(stream: dict) -> bool:
     return any(t in ("commentary", "commentaries") for t in _tokens(title))
 
 
-def _audio_is_english(stream: dict, original_english: bool) -> bool:
+def _stream_is_hindi(stream: dict) -> bool:
+    tags = stream.get("tags") or {}
+    lang = (tags.get("language") or "").lower().strip()
+    return (lang in ("hi", "hin") or lang.startswith("hi-")
+            or "hindi" in _tokens(tags.get("title", "")))
+
+
+def _audio_is_english(stream: dict, original_english: bool, hindi_ok: bool = False) -> bool:
     # Untagged audio (YTS mp4s are all "und") is only trusted as English when
     # the movie/series was originally made in English.
     if _stream_is_english(stream, accept_undetermined=False):
+        return True
+    if hindi_ok and _stream_is_hindi(stream):
         return True
     title_tokens = _tokens((stream.get("tags") or {}).get("title", ""))
     return (original_english and _lang(stream) == "und"
@@ -230,10 +239,12 @@ def _audio_is_english(stream: dict, original_english: bool) -> bool:
 
 
 def decide_streams(probe, accept_undetermined: bool,
-                   original_english: bool = False) -> tuple[str, str]:
+                   original_english: bool = False,
+                   hindi_ok: bool = False) -> tuple[str, str]:
     """Return ("pass"|"fail"|"inconclusive", details) for ffprobe JSON output.
 
-    Passes on a full English subtitle track or an English audio track.
+    Passes on a full English subtitle track or an English audio track
+    (Hindi audio too when hindi_ok, which the caller sets for movies).
     """
     if isinstance(probe, (str, bytes)):
         try:
@@ -252,11 +263,14 @@ def decide_streams(probe, accept_undetermined: bool,
     if counted:
         return "pass", "English subtitles: " + ", ".join(_lang(s) for s in counted)
     eng_audio = [s for s in audio
-                 if not _audio_is_commentary(s) and _audio_is_english(s, original_english)]
+                 if not _audio_is_commentary(s)
+                 and _audio_is_english(s, original_english, hindi_ok)]
     if eng_audio:
         langs = ", ".join(_lang(s) for s in eng_audio)
         if all(_lang(s) == "und" for s in eng_audio):
-            return "pass", f"English audio ({langs}; original language English)"
+            return "pass", f"untagged audio ({langs}; accepted from original language)"
+        if hindi_ok and any(_stream_is_hindi(s) for s in eng_audio):
+            return "pass", "English/Hindi audio: " + langs
         return "pass", "English audio: " + langs
     sub_desc = ", ".join(_lang(s) + (" forced" if _stream_is_forced(s) else "")
                          for s in subs) or "none"
@@ -662,7 +676,8 @@ class Gate:
         # by atom size, so it reads the real file; everything else gets a head copy.
         head = min(have, max(self.cfg.head_bytes, 32 * MIB))
         out = self._probe(path) if mp4 else self._probe_head(path, head)
-        verdict, details = decide_streams(out, self.cfg.accept_und)
+        hindi_ok = self.cfg.apps[t["category"]][0] == "Radarr"  # Hindi audio is fine for movies
+        verdict, details = decide_streams(out, self.cfg.accept_und, hindi_ok=hindi_ok)
         if verdict == "fail" and needs_original_language(out):
             lang = self._original_language(t, st)
             if lang is None:
@@ -672,7 +687,9 @@ class Gate:
                 if time.time() - st["lang_wait_since"] < self.cfg.queue_grace:
                     return
             verdict, details = decide_streams(out, self.cfg.accept_und,
-                                              original_english=(lang == "English"))
+                                              original_english=(lang == "English"
+                                                               or (hindi_ok and lang == "Hindi")),
+                                              hindi_ok=hindi_ok)
         if verdict == "pass":
             self._pass(t, st, details)
         elif verdict == "fail":

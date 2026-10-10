@@ -100,6 +100,15 @@ class DecideStreams(unittest.TestCase):
     def test_eng(self):
         self.assertEqual(self.decide([VIDEO, stream("subtitle", "eng")]), "pass")
 
+    def test_hindi_audio_movies_only(self):
+        hi = [VIDEO, stream("audio", "hin")]
+        self.assertEqual(sg.decide_streams({"streams": hi}, True)[0], "fail")
+        self.assertEqual(sg.decide_streams({"streams": hi}, True, hindi_ok=True)[0], "pass")
+        titled = [VIDEO, stream("audio", "und", title="Hindi 5.1")]
+        self.assertEqual(sg.decide_streams({"streams": titled}, True, hindi_ok=True)[0], "pass")
+        tamil = [VIDEO, stream("audio", "tam")]
+        self.assertEqual(sg.decide_streams({"streams": tamil}, True, hindi_ok=True)[0], "fail")
+
     def test_tur_eng(self):
         self.assertEqual(self.decide([VIDEO, stream("subtitle", "tur"), stream("subtitle", "eng")]), "pass")
 
